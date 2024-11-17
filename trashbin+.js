@@ -243,6 +243,29 @@
 		widget.label = state ? UNTHROW_TEXT : THROW_TEXT;
 	}
 
+	Spicetify.Player.addEventListener("songchange", (event) => {
+		const data = Spicetify.Player.data || Spicetify.Queue;
+		if (!data) return;
+		// const isBanned = trashSongList[data.item.uri];
+		console.log(dataQueue());
+	});
+
+	function dataQueue() {
+		const queueUriArr = [];
+		const spicetifyQueue = Spicetify.Player.data?.nextItems || Spicetify.Queue?.nextTracks;
+
+		if (spicetifyQueue) {
+			spicetifyQueue.forEach(element => {
+				if (element.uri) {
+					queueUriArr.push(element.uri);
+				}
+			});
+		}
+		return queueUriArr;
+	}
+
+
+
 	function watchChange() {
 		const data = Spicetify.Player.data || Spicetify.Queue;
 		if (!data) return;
