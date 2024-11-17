@@ -193,8 +193,8 @@
 
 			if (!trashSongList[uri]) {
 				trashSongList[uri] = true;
-				if (shouldSkipCurrentTrack(uri, type)) Spicetify.Player.next();
-				Spicetify.showNotification("Song added to trashbin");
+				if (shouldSkipCurrentTrack(uri, type)) //Spicetify.Player.next();
+					Spicetify.showNotification("Song added to trashbin");
 			} else {
 				delete trashSongList[uri];
 				setWidgetState(false);
@@ -243,17 +243,35 @@
 		widget.label = state ? UNTHROW_TEXT : THROW_TEXT;
 	}
 
-	Spicetify.Player.addEventListener("songchange", (event) => {
+	function getTrashSongsAsArray() {
+		const trashSongsArray = Object.keys(trashSongList);
+		return trashSongsArray;
+	}
+
+	Spicetify.Player.addEventListener("songchange", async () => {
 		const data = Spicetify.Player.data || Spicetify.Queue;
-		if (!data) return;
-		// const isBanned = trashSongList[data.item.uri];
-		console.log(dataQueue());
+
+		if (!data) {
+			console.warn("No player data or queue available.");
+			return;
+		}
+
+		const queueUris = dataQueue();
+		const trashUris = getTrashSongsAsArray();
+		const queueWithoutTrash = queueUris.filter(value => !trashUris.includes(value));
+
+		const currentUri = Spicetify.Player.data?.item.uri;
+		if (trashUris.includes(currentUri)) {
+			if (queueWithoutTrash.length > 0) {
+				const nextTrackUri = queueWithoutTrash[0];
+				await Spicetify.Player.playUri(nextTrackUri);
+			}
+		}
 	});
 
 	function dataQueue() {
 		const queueUriArr = [];
 		const spicetifyQueue = Spicetify.Player.data?.nextItems || Spicetify.Queue?.nextTracks;
-
 		if (spicetifyQueue) {
 			spicetifyQueue.forEach(element => {
 				if (element.uri) {
@@ -279,7 +297,7 @@
 		}
 
 		if (isBanned) {
-			Spicetify.Player.next();
+			//Spicetify.Player.next();
 			return;
 		}
 
@@ -288,7 +306,7 @@
 
 		while (artistUri) {
 			if (trashArtistList[artistUri]) {
-				Spicetify.Player.next();
+				//Spicetify.Player.next();
 				return;
 			}
 
@@ -339,8 +357,8 @@
 
 		if (!list[uri]) {
 			list[uri] = true;
-			if (shouldSkipCurrentTrack(uri, type)) Spicetify.Player.next();
-			Spicetify.Player.data?.item.uri === uri && setWidgetState(true);
+			if (shouldSkipCurrentTrack(uri, type)) //Spicetify.Player.next();
+				Spicetify.Player.data?.item.uri === uri && setWidgetState(true);
 			Spicetify.showNotification(type === Spicetify.URI.Type.TRACK ? "Song added to trashbin" : "Artist added to trashbin");
 		} else {
 			delete list[uri];
