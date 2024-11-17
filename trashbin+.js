@@ -256,64 +256,76 @@
 			return;
 		}
 
-		const queueUris = dataQueue();
-		const trashUris = getTrashSongsAsArray();
-		const queueWithoutTrash = queueUris.filter(value => !trashUris.includes(value));
-
-		const currentUri = Spicetify.Player.data?.item.uri;
-		if (trashUris.includes(currentUri)) {
-			if (queueWithoutTrash.length > 0) {
-				const nextTrackUri = queueWithoutTrash[0];
-				await Spicetify.Player.playUri(nextTrackUri);
-			}
-		}
-	});
-
-
-
-	//Tests
-
-	async function skipToTrackInQueue(trackIndex) {
-		// Get current queue and track data
-		const queue = await Spicetify.Platform.PlayerAPI.getQueue();
-		const currentTrack = Spicetify.Player.data;
-		
-		// Get target track from queue
-		const targetTrack = queue.nextUp[trackIndex];
-		
-		// Log data for debugging
-		console.log("Current Track:", currentTrack);
-		console.log("Queue:", queue);
-		console.log("Target Track:", targetTrack);
-	 
-		// Skip to the target track
-		Spicetify.Player.playUri(
-			queue.current.uri,
-			{},
-			{
-				skipTo: {
-					uid: "30553f36002e7e85",
-					uri: "spotify:track:4naKIKKdMiDPeixQZALrhm"
-				}
-			}
-		);
-	 }
-	Spicetify.Player.addEventListener("songchange", (event) => {
-		skipToTrackInQueue("12");
-	});
-	///////////////////////////////////////////////////////////////////////////////////
-	function dataQueue() {
-		const queueUriArr = [];
-		const spicetifyQueue = Spicetify.Player.data?.nextItems || Spicetify.Queue?.nextTracks;
-		if (spicetifyQueue) {
-			spicetifyQueue.forEach(element => {
-				if (element.uri) {
-					queueUriArr.push(element.uri);
-				}
+		// Funktion: Warten, bis der Player tatsächlich spielt
+		const waitUntilPlaying = async () => {
+			return new Promise((resolve) => {
+				const interval = setInterval(() => {
+					if (Spicetify.Player.isPlaying()) {
+						clearInterval(interval);
+						resolve(true);
+					}
+				}, 100); // Überprüfung alle 100ms
 			});
+		};
+
+		// Warten, bis der Song abgespielt wird
+		await waitUntilPlaying();
+
+		console.log("Player is now playing. Processing queue...");
+
+		const queue = await Spicetify.Platform.PlayerAPI.getQueue();
+		const trashUris = getTrashSongsAsArray();
+		const queueWithoutTrash = []
+		const targetTrack = queue.nextUp[0];
+		const trashIndices = [];
+
+		queue.nextUp.forEach((item, index) => {
+			if (!trashUris.includes(item)) {
+				queueWithoutTrash.push(item);
+			}
+			console.log(queueWithoutTrash);
+			if (queueWithoutTrash.includes(item)) {
+				trashIndices.push(index);
+			}
+		});
+
+		console.log(queueWithoutTrash);
+
+
+		if (!queue || !queue.nextUp || queue.nextUp.length === 0) {
+			console.warn("No upcoming tracks in the queue.");
+			return;
 		}
-		return queueUriArr;
-	}
+
+
+		if (trashUris.includes(queue.uri)) {
+			console.warn("Current track is in the trash list, skipping...");
+
+			if (queueWithoutTrash.length > 0) {
+				//if ()
+				try {
+					// play no trash song
+					await Spicetify.Player.playUri(
+						queue.uri,
+						{}, // empty options
+						{
+							skipTo: {
+								uid: targetTrack.uid,
+								uri: targetTrack.uri,
+							},
+						}
+					);
+					console.log("Skipped to next valid track:", targetTrack.uri);
+				} catch (error) {
+					console.error("Error while skipping to the next track:", error);
+				}
+			} else {
+				console.warn("No valid tracks left in the queue without trash.");
+			}
+		}
+	});
+
+
 
 
 
