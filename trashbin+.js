@@ -193,8 +193,8 @@
 
 			if (!trashSongList[uri]) {
 				trashSongList[uri] = true;
-				if (shouldSkipCurrentTrack(uri, type)) Spicetify.Player.next();
-				Spicetify.showNotification("Song added to trashbin");
+				if (shouldSkipCurrentTrack(uri, type)) //Spicetify.Player.next();
+					Spicetify.showNotification("Song added to trashbin");
 			} else {
 				delete trashSongList[uri];
 				setWidgetState(false);
@@ -243,6 +243,106 @@
 		widget.label = state ? UNTHROW_TEXT : THROW_TEXT;
 	}
 
+	function getTrashSongsAsArray() {
+		const trashSongsArray = Object.keys(trashSongList);
+		return trashSongsArray;
+	}
+
+	Spicetify.Player.addEventListener("songchange", async () => {
+		await skipTrashSongsinQueue();
+	});
+
+	async function skipTrashSongsinQueue() {
+
+		const data = Spicetify.Player.data || Spicetify.Queue;
+
+		if (!data) {
+			console.warn("No player data or queue available.");
+			return;
+		}
+
+		// Funktion: Warten, bis der Player tatsächlich spielt
+		const waitUntilPlaying = async () => {
+			return new Promise((resolve) => {
+				const interval = setInterval(() => {
+					if (Spicetify.Player.isPlaying()) {
+						clearInterval(interval);
+						resolve(true);
+					}
+				}, 100); // Überprüfung alle 100ms
+			});
+		};
+
+		// Warten, bis der Song abgespielt wird
+		await waitUntilPlaying();
+
+		console.log("Player is now playing. Processing queue...");
+
+		const queue = await Spicetify.Platform.PlayerAPI.getQueue();
+		const trashUris = getTrashSongsAsArray();
+		const queueWithoutTrash = []
+		const queueWithoutTrashTrack = []
+		const trashIndices = [];
+
+		queue.nextUp.forEach((item, index) => {
+			if (!trashUris.includes(item.uri)) {
+				queueWithoutTrash.push(item.uri);
+			}
+		});
+		console.log(queueWithoutTrash);
+		queue.nextUp.forEach((item, index) => {
+			if (trashUris.includes(item.uri)) {
+				trashIndices.push(index);
+			}
+		});
+
+		queue.nextUp.forEach((item, index) => {
+			if (!trashUris.includes(item.uri)) {
+				queueWithoutTrashTrack.push(item);
+			}
+		});
+		let targetTrack = (queueWithoutTrashTrack[0]);
+		console.log(queueWithoutTrash);
+
+
+		if (!queue || !queue.nextUp || queue.nextUp.length === 0) {
+			console.log("No upcoming tracks in the queue.");
+			return;
+		}
+
+
+		if (trashUris.includes(queue.current.uri)) {
+			console.log("Current track is in the trash list, skipping...");
+
+			if (queueWithoutTrash.length > 0) {
+				try {
+					// play no trash song
+					await Spicetify.Player.playUri(
+						targetTrack.metadata.entity_uri,
+						{}, // empty options
+						{
+							skipTo: {
+								uid: targetTrack.uid,
+								uri: targetTrack.uri,
+							},
+						}
+					);
+					console.log("Skipped to next valid track:", targetTrack.uri);
+				} catch (error) {
+					console.error("Error while skipping to the next track:", error);
+				}
+			} else {
+				console.warn("No valid tracks left in the queue without trash.");
+			}
+		}
+
+	}
+
+
+
+
+
+
 	function watchChange() {
 		const data = Spicetify.Player.data || Spicetify.Queue;
 		if (!data) return;
@@ -256,7 +356,7 @@
 		}
 
 		if (isBanned) {
-			Spicetify.Player.next();
+			//Spicetify.Player.next();
 			return;
 		}
 
@@ -265,7 +365,7 @@
 
 		while (artistUri) {
 			if (trashArtistList[artistUri]) {
-				Spicetify.Player.next();
+				//Spicetify.Player.next();
 				return;
 			}
 
@@ -316,8 +416,8 @@
 
 		if (!list[uri]) {
 			list[uri] = true;
-			if (shouldSkipCurrentTrack(uri, type)) Spicetify.Player.next();
-			Spicetify.Player.data?.item.uri === uri && setWidgetState(true);
+			if (shouldSkipCurrentTrack(uri, type)) //Spicetify.Player.next();
+				Spicetify.Player.data?.item.uri === uri && setWidgetState(true);
 			Spicetify.showNotification(type === Spicetify.URI.Type.TRACK ? "Song added to trashbin" : "Artist added to trashbin");
 		} else {
 			delete list[uri];
