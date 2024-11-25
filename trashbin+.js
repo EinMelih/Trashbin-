@@ -249,6 +249,11 @@
 	}
 
 	Spicetify.Player.addEventListener("songchange", async () => {
+		await skipTrashSongsinQueue();
+	});
+
+	async function skipTrashSongsinQueue() {
+
 		const data = Spicetify.Player.data || Spicetify.Queue;
 
 		if (!data) {
@@ -276,37 +281,44 @@
 		const queue = await Spicetify.Platform.PlayerAPI.getQueue();
 		const trashUris = getTrashSongsAsArray();
 		const queueWithoutTrash = []
-		const targetTrack = queue.nextUp[0];
+		const queueWithoutTrashTrack = []
 		const trashIndices = [];
 
 		queue.nextUp.forEach((item, index) => {
-			if (!trashUris.includes(item)) {
-				queueWithoutTrash.push(item);
+			if (!trashUris.includes(item.uri)) {
+				queueWithoutTrash.push(item.uri);
 			}
-			console.log(queueWithoutTrash);
-			if (queueWithoutTrash.includes(item)) {
+		});
+		console.log(queueWithoutTrash);
+		queue.nextUp.forEach((item, index) => {
+			if (trashUris.includes(item.uri)) {
 				trashIndices.push(index);
 			}
 		});
 
+		queue.nextUp.forEach((item, index) => {
+			if (!trashUris.includes(item.uri)) {
+				queueWithoutTrashTrack.push(item);
+			}
+		});
+		let targetTrack = (queueWithoutTrashTrack[0]);
 		console.log(queueWithoutTrash);
 
 
 		if (!queue || !queue.nextUp || queue.nextUp.length === 0) {
-			console.warn("No upcoming tracks in the queue.");
+			console.log("No upcoming tracks in the queue.");
 			return;
 		}
 
 
-		if (trashUris.includes(queue.uri)) {
-			console.warn("Current track is in the trash list, skipping...");
+		if (trashUris.includes(queue.current.uri)) {
+			console.log("Current track is in the trash list, skipping...");
 
 			if (queueWithoutTrash.length > 0) {
-				//if ()
 				try {
 					// play no trash song
 					await Spicetify.Player.playUri(
-						queue.uri,
+						targetTrack.metadata.entity_uri,
 						{}, // empty options
 						{
 							skipTo: {
@@ -323,7 +335,9 @@
 				console.warn("No valid tracks left in the queue without trash.");
 			}
 		}
-	});
+
+	}
+
 
 
 
