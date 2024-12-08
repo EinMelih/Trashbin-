@@ -261,7 +261,6 @@
 			return;
 		}
 
-		// Funktion: Warten, bis der Player tatsächlich spielt
 		const waitUntilPlaying = async () => {
 			return new Promise((resolve) => {
 				const interval = setInterval(() => {
@@ -269,11 +268,10 @@
 						clearInterval(interval);
 						resolve(true);
 					}
-				}, 100); // Überprüfung alle 100ms
+				}, 100);
 			});
 		};
 
-		// Warten, bis der Song abgespielt wird
 		await waitUntilPlaying();
 
 		console.log("Player is now playing. Processing queue...");
@@ -312,7 +310,13 @@
 
 
 		if (trashUris.includes(queue.current.uri)) {
+			const currentTrack = Spicetify.Player.data.item;
+
 			console.log("Current track is in the trash list, skipping...");
+
+			console.log("Current track das gelöscht aus der queue wird:", currentTrack);
+
+
 
 			if (queueWithoutTrash.length > 0) {
 				try {
@@ -335,12 +339,47 @@
 				console.warn("No valid tracks left in the queue without trash.");
 			}
 		}
-
 	}
+	(function addTrashIconsToQueue() {
+		const xpath = '/html/body/div[3]/div/div[2]/div[5]/div[1]/div/aside/div/div[2]/div[2]/div/div/div[1]/div/div/div[2]/ul/div/li/div/div[4]/div[1]/p[2]/span/span[2]/a';
 
+		function addTrashIcons() {
+			const results = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
 
+			for (let i = 0; i < results.snapshotLength; i++) {
+				const targetElement = results.snapshotItem(i);
 
+				if (!targetElement.parentNode.querySelector('.trash-icon')) {
+					const trashIcon = document.createElement('span');
+					trashIcon.className = 'trash-icon';
+					trashIcon.style.marginLeft = '8px';
+					trashIcon.style.cursor = 'pointer';
+					trashIcon.innerHTML = `
+						<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+							<path d="M3 6v18h18V6H3zm5 14c0 .552-.448 1-1 1s-1-.448-1-1V10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1V10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1V10c0-.552.448-1 1-1s1 .448 1 1v10zm4-18v2H2V2h5.711c.9 0 1.631-1.099 1.631-2h5.315c0 .901.73 2 1.631 2H22z"/>
+						</svg>
+					`;
+					targetElement.parentNode.appendChild(trashIcon);
 
+					trashIcon.addEventListener('click', (event) => {
+						event.stopPropagation();
+						console.log(`Trash icon clicked for: ${targetElement.textContent}`);
+					});
+				}
+			}
+		}
+
+		const observer = new MutationObserver(() => {
+			addTrashIcons();
+		});
+
+		const queueContainer = document.querySelector('ul');
+		if (queueContainer) {
+			observer.observe(queueContainer, { childList: true, subtree: true });
+		}
+
+		addTrashIcons();
+	})();
 
 
 	function watchChange() {
