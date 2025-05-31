@@ -45,7 +45,7 @@
 			const state = slider.classList.contains("disabled");
 			slider.classList.toggle("disabled");
 			Spicetify.LocalStorage.set(name, state);
-			console.log(name, state);
+			//console.log(name, state);
 			callback(state);
 		};
 
@@ -65,6 +65,17 @@
 				state && trashbinStatus ? widget.register() : widget.deregister();
 			})
 		);
+		content.appendChild(createSlider("TrashbinQueueEnabled", "Enable Queue Trashbin", enableQueueTrashbin, (state) => {
+			enableQueueTrashbin = state;
+			if (state) {
+				addTrashbinToQueue();
+			} else {
+				// Entferne alle Trashbin-Buttons aus der Queue
+				document.querySelectorAll('.custom-trashbin-button').forEach(button => {
+					button.remove();
+				});
+			}
+		}));
 
 		// Local Storage
 		header = document.createElement("h2");
@@ -159,12 +170,14 @@
 	// Settings Variables - Initial Values
 	let trashbinStatus = initValue("trashbin-enabled", true);
 	let enableWidget = initValue("TrashbinWidgetIcon", true);
+	// Füge diese Zeile zu den anderen Settings Variables hinzu
+	let enableQueueTrashbin = initValue("TrashbinQueueEnabled", true);
 
 	// Settings Menu Initialization
 	const content = document.createElement("div");
 	styleSettings();
 	settingsContent();
-
+	//TODO: trash logo 
 	const trashbinIcon =
 		'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentcolor"><path d="M3 6v18h18v-18h-18zm5 14c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm4-18v2h-20v-2h5.711c.9 0 1.631-1.099 1.631-2h5.315c0 .901.73 2 1.631 2h5.712z"/></svg>';
 
@@ -249,8 +262,169 @@
 	}
 
 	Spicetify.Player.addEventListener("songchange", async () => {
-		await skipTrashSongsinQueue();
+		try {
+			await skipTrashSongsinQueue();
+			addTrashIconsToPlaylist();
+			addTrashIconsToQueue();
+
+		} catch (error) {
+			console.error("Fehler in songchange-Listener:", error);
+		}
 	});
+	// Spicetify Queue Trashbin Function
+	async function addTrashbinToQueue() {
+		if (!enableQueueTrashbin) {
+			// Entferne alle Trashbin-Buttons, falls vorhanden
+			document.querySelectorAll('.custom-trashbin-button').forEach(button => {
+				button.remove();
+			});
+			return;
+		}
+
+		// CSS für Custom Buttons hinzufügen
+		if (!document.querySelector('#custom-trashbin-styles')) {
+			const customCSS = document.createElement('style');
+			customCSS.id = 'custom-trashbin-styles';
+			customCSS.textContent = `
+            .custom-trashbin-button {
+                opacity: 1 !important;
+                visibility: visible !important;
+                display: inline-flex !important;
+                margin-left: 4px !important;
+            }
+            .custom-trashbin-button:hover {
+                opacity: 1 !important;
+                background-color: rgba(255, 255, 255, 0.1) !important;
+            }
+            *:not(:hover) .custom-trashbin-button {
+                opacity: 1 !important;
+                visibility: visible !important;
+            }
+        `;
+			document.head.appendChild(customCSS);
+		}
+
+		try {
+			// Queue von Spicetify API holen
+			const queue = await Spicetify.Platform.PlayerAPI.getQueue();
+
+			// Alle existierenden "More options" Buttons finden
+			const existingButtons = document.querySelectorAll('[aria-label*="More options for"]');
+
+			if (existingButtons.length === 0) {
+				return;
+			}
+
+			let buttonCount = 0;
+
+			existingButtons.forEach((button, index) => {
+				// Prüfen ob bereits ein Trashbin-Button existiert
+				const nextElement = button.nextSibling;
+				if (nextElement && nextElement.classList && nextElement.classList.contains('custom-trashbin-button')) {
+					console.log('⚠️ Trashbin-Button bereits vorhanden');
+					return;
+				}
+
+				// Button klonen
+				const trashbinButton = button.cloneNode(true);
+
+				// Trashbin Icon
+				const trashbinIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentcolor"><path d="M3 6v18h18v-18h-18zm5 14c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm4-18v2h-20v-2h5.711c.9 0 1.631-1.099 1.631-2h5.315c0 .901.73 2 1.631 2h5.712z"/></svg>';
+
+				// Icon ersetzen
+				const svgElement = trashbinButton.querySelector('svg');
+				if (svgElement) {
+					svgElement.outerHTML = trashbinIcon;
+				}
+
+				// Button konfigurieren
+				const originalLabel = button.getAttribute('aria-label');
+				const songName = originalLabel.replace('More options for ', '');
+
+				trashbinButton.setAttribute('aria-label', `Remove ${songName} from queue`);
+				trashbinButton.classList.add('custom-trashbin-button');
+				trashbinButton.setAttribute('data-song-index', index);
+
+				// Styling für dauerhaft sichtbar
+				trashbinButton.style.cssText = `
+                margin-left: 4px !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+                display: inline-flex !important;
+                position: static !important;
+            `;
+
+				// Click Event für Queue-Manipulation
+				trashbinButton.addEventListener('click', async function (e) {
+					e.preventDefault();
+					e.stopPropagation();
+
+					try {
+						// Aktualisierte Queue holen
+						const currentQueue = await Spicetify.Platform.PlayerAPI.getQueue();
+						console.log('📋 Aktuelle Queue:', currentQueue);
+
+						// Song aus Queue entfernen (falls möglich)
+						if (currentQueue && currentQueue.nextTracks && currentQueue.nextTracks[index]) {
+							const trackToRemove = currentQueue.nextTracks[index];
+
+							// Spicetify API zum Entfernen verwenden
+							if (Spicetify.Platform.PlayerAPI.removeFromQueue) {
+								await Spicetify.Platform.PlayerAPI.removeFromQueue([trackToRemove.uri]);
+
+								// Button entfernen nach erfolgreicher Aktion
+								button.parentElement.style.opacity = '0.5';
+								setTimeout(() => {
+									if (button.parentElement) {
+										button.parentElement.remove();
+									}
+								}, 300);
+
+							} else {
+								// Alternative: Spicetify.Queue API verwenden
+								if (Spicetify.Queue && Spicetify.Queue.removeFromQueue) {
+									Spicetify.Queue.removeFromQueue(trackToRemove.uri);
+								} else {
+									console.log('⚠️ Keine Queue-Remove API gefunden');
+									// Fallback: Visuelles Feedback
+									Spicetify.showNotification(`${songName} markiert zum Entfernen`);
+								}
+							}
+						}
+
+						// Notification anzeigen
+						if (Spicetify.showNotification) {
+							Spicetify.showNotification(`🗑️ ${songName} aus Queue entfernt`);
+						} else {
+							alert(`🗑️ ${songName} aus Queue entfernt`);
+						}
+
+					} catch (error) {
+						console.error('❌ Fehler beim Entfernen aus Queue:', error);
+						if (Spicetify.showNotification) {
+							Spicetify.showNotification(`❌ Fehler beim Entfernen von ${songName}`);
+						}
+					}
+				});
+
+				// Button neben Original einfügen
+				button.parentNode.insertBefore(trashbinButton, button.nextSibling);
+				buttonCount++;
+			});
+
+			console.log(`✅ ${buttonCount} Trashbin-Buttons hinzugefügt`);
+
+			if (Spicetify.showNotification) {
+				Spicetify.showNotification(`🗑️ ${buttonCount} Trashbin-Buttons zur Queue hinzugefügt`);
+			}
+
+		} catch (error) {
+			console.error('❌ Fehler beim Laden der Queue:', error);
+			if (Spicetify.showNotification) {
+				Spicetify.showNotification('❌ Fehler beim Laden der Queue');
+			}
+		}
+	}
 
 	async function skipTrashSongsinQueue() {
 
@@ -265,6 +439,7 @@
 			return new Promise((resolve) => {
 				const interval = setInterval(() => {
 					if (Spicetify.Player.isPlaying()) {
+						addTrashbinToQueue();
 						clearInterval(interval);
 						resolve(true);
 					}
@@ -274,7 +449,7 @@
 
 		await waitUntilPlaying();
 
-		console.log("Player is now playing. Processing queue...");
+		//console.log("Player is now playing. Processing queue...");
 
 		const queue = await Spicetify.Platform.PlayerAPI.getQueue();
 		const trashUris = getTrashSongsAsArray();
@@ -287,7 +462,7 @@
 				queueWithoutTrash.push(item.uri);
 			}
 		});
-		console.log(queueWithoutTrash);
+		//console.log(queueWithoutTrash);
 		queue.nextUp.forEach((item, index) => {
 			if (trashUris.includes(item.uri)) {
 				trashIndices.push(index);
@@ -300,11 +475,10 @@
 			}
 		});
 		let targetTrack = (queueWithoutTrashTrack[0]);
-		console.log(queueWithoutTrash);
-
+		//console.log(queueWithoutTrash);
 
 		if (!queue || !queue.nextUp || queue.nextUp.length === 0) {
-			console.log("No upcoming tracks in the queue.");
+			// console.log("No upcoming tracks in the queue.");
 			return;
 		}
 
@@ -312,9 +486,9 @@
 		if (trashUris.includes(queue.current.uri)) {
 			const currentTrack = Spicetify.Player.data.item;
 
-			console.log("Current track is in the trash list, skipping...");
+			// console.log("Current track is in the trash list, skipping...");
 
-			console.log("Current track das gelöscht aus der queue wird:", currentTrack);
+			// console.log("Current track das gelöscht aus der queue wird:", currentTrack);
 
 
 
@@ -331,55 +505,61 @@
 							},
 						}
 					);
-					console.log("Skipped to next valid track:", targetTrack.uri);
+					// console.log("Skipped to next valid track:", targetTrack.uri);
 				} catch (error) {
-					console.error("Error while skipping to the next track:", error);
+					// console.error("Error while skipping to the next track:", error);
 				}
 			} else {
-				console.warn("No valid tracks left in the queue without trash.");
+				// console.warn("No valid tracks left in the queue without trash.");
 			}
 		}
 	}
-	(function addTrashIconsToQueue() {
-		const xpath = '/html/body/div[3]/div/div[2]/div[5]/div[1]/div/aside/div/div[2]/div[2]/div/div/div[1]/div/div/div[2]/ul/div/li/div/div[4]/div[1]/p[2]/span/span[2]/a';
 
-		function addTrashIcons() {
-			const results = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+	async function getPlaylistData() {
+		let playlistUri = Spicetify.Platform.History.location.pathname.split('/').pop(),
+			playlistData = await Spicetify.Platform.PlaylistAPI.getContents(`spotify:playlist:${playlistUri}`),
+			playlistNames = [];
 
-			for (let i = 0; i < results.snapshotLength; i++) {
-				const targetElement = results.snapshotItem(i);
+		playlistData.items.forEach((item, index) => {
+			playlistNames.push(item.name);
+		});
+		return playlistNames;
+	}
 
-				if (!targetElement.parentNode.querySelector('.trash-icon')) {
-					const trashIcon = document.createElement('span');
-					trashIcon.className = 'trash-icon';
-					trashIcon.style.marginLeft = '8px';
-					trashIcon.style.cursor = 'pointer';
-					trashIcon.innerHTML = `
-						<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
-							<path d="M3 6v18h18V6H3zm5 14c0 .552-.448 1-1 1s-1-.448-1-1V10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1V10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1V10c0-.552.448-1 1-1s1 .448 1 1v10zm4-18v2H2V2h5.711c.9 0 1.631-1.099 1.631-2h5.315c0 .901.73 2 1.631 2H22z"/>
-						</svg>
-					`;
-					targetElement.parentNode.appendChild(trashIcon);
+	async function addTrashIconsToPlaylist() {
+		const playlistNames = await getPlaylistData();
 
-					trashIcon.addEventListener('click', (event) => {
-						event.stopPropagation();
-						console.log(`Trash icon clicked for: ${targetElement.textContent}`);
-					});
-				}
-			}
-		}
+	}
 
-		const observer = new MutationObserver(() => {
-			addTrashIcons();
+	function addTrashIconsToQueue() {
+		const titles = document.querySelectorAll('div.main-trackList-rowTitle');
+		titles.forEach(link => {
+			console.log(link.textContent.trim());
 		});
 
-		const queueContainer = document.querySelector('ul');
-		if (queueContainer) {
-			observer.observe(queueContainer, { childList: true, subtree: true });
-		}
+		// for (let i = 0; i < results.snapshotLength; i++) {
+		// 	const targetElement = results.snapshotItem(i);
 
-		addTrashIcons();
-	})();
+		// 	if (!targetElement.parentNode.querySelector('.trash-icon')) {
+		// 		const trashIcon = document.createElement('span');
+		// 		trashIcon.className = 'trash-icon';
+		// 		trashIcon.style.marginLeft = '8px';
+		// 		trashIcon.style.cursor = 'pointer';
+		// 		trashIcon.innerHTML = `
+		// 			<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+		// 				<path d="M3 6v18h18V6H3zm5 14c0 .552-.448 1-1 1s-1-.448-1-1V10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1V10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1V10c0-.552.448-1 1-1s1 .448 1 1v10zm4-18v2H2V2h5.711c.9 0 1.631-1.099 1.631-2h5.315c0 .901.73 2 1.631 2H22z"/>
+		// 			</svg>
+		// 		`;
+		// 		targetElement.parentNode.appendChild(trashIcon);
+
+		// 		trashIcon.addEventListener('click', (event) => {
+		// 			event.stopPropagation();
+		// 			console.log(`Trash icon clicked for: ${targetElement.textContent}`);
+		// 		});
+		// 	}
+		// }
+
+	}
 
 
 	function watchChange() {
@@ -536,4 +716,7 @@
 		};
 		input.click();
 	}
+
+	addTrashbinToQueue();
 })();
+
