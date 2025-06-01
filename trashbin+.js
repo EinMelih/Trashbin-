@@ -2,7 +2,7 @@
 // AUTHOR: khanhas and OhItsTom
 // DESCRIPTION: Throw songs to trashbin and never hear it again.
 
-/// <reference path="../globals.d.ts" />
+//<reference path="../globals.d.ts" />
 
 (function TrashBin() {
 	const skipBackBtn =
@@ -70,7 +70,7 @@
 			if (state) {
 				addTrashbinToQueue();
 			} else {
-				// Entferne alle Trashbin-Buttons aus der Queue
+				// delete all trashbin buttons of queue
 				document.querySelectorAll('.custom-trashbin-button').forEach(button => {
 					button.remove();
 				});
@@ -252,7 +252,7 @@
 
 	function setWidgetState(state, hidden = false) {
 		hidden ? widget.deregister() : enableWidget && widget.register();
-		widget.active = !!state;
+		widget.active = !!state; // if true trash green if false trash icon white
 		widget.label = state ? UNTHROW_TEXT : THROW_TEXT;
 	}
 
@@ -263,8 +263,8 @@
 
 	Spicetify.Player.addEventListener("songchange", async () => {
 		try {
+			addTrashbinToQueue();
 			await skipTrashSongsinQueue();
-			addTrashIconsToPlaylist();
 			addTrashIconsToQueue();
 
 		} catch (error) {
@@ -274,14 +274,14 @@
 	// Spicetify Queue Trashbin Function
 	async function addTrashbinToQueue() {
 		if (!enableQueueTrashbin) {
-			// Entferne alle Trashbin-Buttons, falls vorhanden
+			// Remove all trashbin buttons if feature is disabled
 			document.querySelectorAll('.custom-trashbin-button').forEach(button => {
 				button.remove();
 			});
 			return;
 		}
 
-		// CSS für Custom Buttons hinzufügen
+		// Add CSS for custom buttons if not already present
 		if (!document.querySelector('#custom-trashbin-styles')) {
 			const customCSS = document.createElement('style');
 			customCSS.id = 'custom-trashbin-styles';
@@ -305,10 +305,11 @@
 		}
 
 		try {
-			// Queue von Spicetify API holen
+			// Get all URIs in queue (including current track)
+			const allURIs = await getAllQueueURIs();
 			const queue = await Spicetify.Platform.PlayerAPI.getQueue();
 
-			// Alle existierenden "More options" Buttons finden
+			// Find all "More options" buttons in the UI
 			const existingButtons = document.querySelectorAll('[aria-label*="More options for"]');
 
 			if (existingButtons.length === 0) {
@@ -317,113 +318,119 @@
 
 			let buttonCount = 0;
 
+			// Process each button in the UI
 			existingButtons.forEach((button, index) => {
-				// Prüfen ob bereits ein Trashbin-Button existiert
+				// Skip if trashbin button already exists
 				const nextElement = button.nextSibling;
-				if (nextElement && nextElement.classList && nextElement.classList.contains('custom-trashbin-button')) {
-					console.log('⚠️ Trashbin-Button bereits vorhanden');
+				if (nextElement && nextElement.classList.contains('custom-trashbin-button')) {
+					console.log('⚠️ Trashbin button already exists');
 					return;
 				}
 
-				// Button klonen
-				const trashbinButton = button.cloneNode(true);
+				// Get the URI for this position
+				const songUri = allURIs[index];
+				if (!songUri) return;
 
-				// Trashbin Icon
-				const trashbinIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentcolor"><path d="M3 6v18h18v-18h-18zm5 14c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm4-18v2h-20v-2h5.711c.9 0 1.631-1.099 1.631-2h5.315c0 .901.73 2 1.631 2h5.712z"/></svg>';
+				// Only show button if song is in trashbin
+				if (trashSongList[songUri]) {
+					// Clone the button element
+					const trashbinButton = button.cloneNode(true);
 
-				// Icon ersetzen
-				const svgElement = trashbinButton.querySelector('svg');
-				if (svgElement) {
-					svgElement.outerHTML = trashbinIcon;
+					// Set trashbin icon
+					trashbinButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentcolor"><path d="M3 6v18h18V6H3zm5 14c0 .552-.448 1-1 1s-1-.448-1-1V10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1V10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1V10c0-.552.448-1 1-1s1 .448 1 1v10zm4-18v2H2V2h5.711c.9 0 1.631-1.099 1.631-2h5.315c0 .901.73 2 1.631 2h5.712z"/></svg>';
+
+					// Configure button
+					const originalLabel = button.getAttribute('aria-label');
+					const songName = originalLabel.replace('More options for ', '');
+
+					trashbinButton.setAttribute('aria-label', `Remove ${songName} from trashbin`);
+					trashbinButton.classList.add('custom-trashbin-button');
+					trashbinButton.setAttribute('data-song-index', index);
+					trashbinButton.setAttribute('data-song-uri', songUri);
+
+					// Apply styling
+					trashbinButton.style.cssText = `
+                    margin-left: 4px !important;
+                    opacity: 1 !important;
+                    visibility: visible !important;
+                    display: inline-flex !important;
+                    position: static !important;
+                `;
+
+					// Add click handler
+					trashbinButton.addEventListener('click', async function (e) {
+						e.preventDefault();
+						e.stopPropagation();
+
+						const uri = this.getAttribute('data-song-uri');
+						if (trashSongList[uri]) {
+							delete trashSongList[uri];
+							putDataLocal();
+							this.remove();
+							Spicetify.showNotification(`Removed ${songName} from trashbin`);
+						}
+					});
+
+					// Insert button into DOM
+					button.parentNode.insertBefore(trashbinButton, button.nextSibling);
+					buttonCount++;
 				}
-
-				// Button konfigurieren
-				const originalLabel = button.getAttribute('aria-label');
-				const songName = originalLabel.replace('More options for ', '');
-
-				trashbinButton.setAttribute('aria-label', `Remove ${songName} from queue`);
-				trashbinButton.classList.add('custom-trashbin-button');
-				trashbinButton.setAttribute('data-song-index', index);
-
-				// Styling für dauerhaft sichtbar
-				trashbinButton.style.cssText = `
-                margin-left: 4px !important;
-                opacity: 1 !important;
-                visibility: visible !important;
-                display: inline-flex !important;
-                position: static !important;
-            `;
-
-				// Click Event für Queue-Manipulation
-				trashbinButton.addEventListener('click', async function (e) {
-					e.preventDefault();
-					e.stopPropagation();
-
-					try {
-						// Aktualisierte Queue holen
-						const currentQueue = await Spicetify.Platform.PlayerAPI.getQueue();
-						console.log('📋 Aktuelle Queue:', currentQueue);
-
-						// Song aus Queue entfernen (falls möglich)
-						if (currentQueue && currentQueue.nextTracks && currentQueue.nextTracks[index]) {
-							const trackToRemove = currentQueue.nextTracks[index];
-
-							// Spicetify API zum Entfernen verwenden
-							if (Spicetify.Platform.PlayerAPI.removeFromQueue) {
-								await Spicetify.Platform.PlayerAPI.removeFromQueue([trackToRemove.uri]);
-
-								// Button entfernen nach erfolgreicher Aktion
-								button.parentElement.style.opacity = '0.5';
-								setTimeout(() => {
-									if (button.parentElement) {
-										button.parentElement.remove();
-									}
-								}, 300);
-
-							} else {
-								// Alternative: Spicetify.Queue API verwenden
-								if (Spicetify.Queue && Spicetify.Queue.removeFromQueue) {
-									Spicetify.Queue.removeFromQueue(trackToRemove.uri);
-								} else {
-									console.log('⚠️ Keine Queue-Remove API gefunden');
-									// Fallback: Visuelles Feedback
-									Spicetify.showNotification(`${songName} markiert zum Entfernen`);
-								}
-							}
-						}
-
-						// Notification anzeigen
-						if (Spicetify.showNotification) {
-							Spicetify.showNotification(`🗑️ ${songName} aus Queue entfernt`);
-						} else {
-							alert(`🗑️ ${songName} aus Queue entfernt`);
-						}
-
-					} catch (error) {
-						console.error('❌ Fehler beim Entfernen aus Queue:', error);
-						if (Spicetify.showNotification) {
-							Spicetify.showNotification(`❌ Fehler beim Entfernen von ${songName}`);
-						}
-					}
-				});
-
-				// Button neben Original einfügen
-				button.parentNode.insertBefore(trashbinButton, button.nextSibling);
-				buttonCount++;
 			});
 
-			console.log(`✅ ${buttonCount} Trashbin-Buttons hinzugefügt`);
-
-			if (Spicetify.showNotification) {
-				Spicetify.showNotification(`🗑️ ${buttonCount} Trashbin-Buttons zur Queue hinzugefügt`);
-			}
+			console.log(`✅ ${buttonCount} Trashbin buttons added`);
 
 		} catch (error) {
-			console.error('❌ Fehler beim Laden der Queue:', error);
+			console.error('❌ Error loading queue:', error);
 			if (Spicetify.showNotification) {
-				Spicetify.showNotification('❌ Fehler beim Laden der Queue');
+				Spicetify.showNotification('❌ Error loading queue');
 			}
 		}
+	}
+
+	// Helper function to get all URIs in queue (including current track)
+	async function getAllQueueURIs() {
+		const queue = await Spicetify.Platform.PlayerAPI.getQueue();
+		const allURIs = [];
+
+		// Add current track URI if available
+		if (queue.current?.uri) {
+			allURIs.push(queue.current.uri);
+		}
+
+		// Add all queue track URIs
+		if (queue.nextUp) {
+			queue.nextUp.forEach(track => {
+				if (track.uri) {
+					allURIs.push(track.uri);
+				}
+			});
+		}
+
+		return allURIs;
+	}
+
+	async function getAllQueueURIs() {
+		// Holen der aktuellen Queue
+		const queue = await Spicetify.Platform.PlayerAPI.getQueue();
+
+		// Array für alle URIs erstellen
+		let allURIs = [];
+
+		// Aktuellen Track hinzufügen (falls vorhanden)
+		if (queue.current && queue.current.uri) {
+			allURIs.push(queue.current.uri);
+		}
+
+		// Alle nächsten Tracks hinzufügen
+		if (queue.nextUp) {
+			queue.nextUp.forEach(track => {
+				if (track.uri) {
+					allURIs.push(track.uri);
+				}
+			});
+		}
+
+		return allURIs;
 	}
 
 	async function skipTrashSongsinQueue() {
@@ -524,11 +531,6 @@
 			playlistNames.push(item.name);
 		});
 		return playlistNames;
-	}
-
-	async function addTrashIconsToPlaylist() {
-		const playlistNames = await getPlaylistData();
-
 	}
 
 	function addTrashIconsToQueue() {
